@@ -37,7 +37,8 @@ class RicochetRobotsPygame:
             'Black': (40, 40, 40),
             'White': (245, 245, 245),
             'Gray': (200, 200, 200),
-            'Highlight': (200, 255, 200)
+            'Highlight': (200, 255, 200),
+            'Panel': (230, 230, 235)
         }
         
         self.calculating = False
@@ -238,6 +239,15 @@ class RicochetRobotsPygame:
         cs = self.cell_size
         offset_x = self.offset_x
         offset_y = self.margin_top
+        grid_w = self.width * cs
+        grid_h = self.height * cs
+
+        # Top and bottom panel bands
+        screen_w, screen_h = self.screen.get_size()
+        pygame.draw.rect(self.screen, self.colors['Panel'], (0, 0, screen_w, offset_y))
+        pygame.draw.rect(self.screen, self.colors['Panel'], (0, offset_y + grid_h, screen_w, screen_h - offset_y - grid_h))
+        pygame.draw.line(self.screen, self.colors['Gray'], (0, offset_y), (screen_w, offset_y), 1)
+        pygame.draw.line(self.screen, self.colors['Gray'], (0, offset_y + grid_h), (screen_w, offset_y + grid_h), 1)
 
         tc, tx, ty, _ = self.current_target
         target_color_zh = self.get_color_name(tc)
@@ -266,14 +276,18 @@ class RicochetRobotsPygame:
         for x in range(self.width):
             for y in range(self.height):
                 rect = pygame.Rect(offset_x + x * cs, offset_y + y * cs, cs, cs)
-                pygame.draw.rect(self.screen, self.colors['Gray'], rect, 1)
                 if 7 <= x <= 8 and 7 <= y <= 8:
                     pygame.draw.rect(self.screen, self.colors['Black'], rect)
+                else:
+                    cell_color = (238, 238, 230) if (x + y) % 2 == 0 else (248, 248, 242)
+                    pygame.draw.rect(self.screen, cell_color, rect)
+                pygame.draw.rect(self.screen, self.colors['Gray'], rect, 1)
 
-        inner = cs // 4
+        pulse = abs(__import__('math').sin(pygame.time.get_ticks() / 500)) * (cs // 8)
+        inner = max(2, cs // 4 - int(pulse))
         target_rect = pygame.Rect(offset_x + tx * cs + inner, offset_y + ty * cs + inner, cs - inner * 2, cs - inner * 2)
-        pygame.draw.rect(self.screen, self.colors[tc], target_rect)
-        pygame.draw.rect(self.screen, self.colors['Black'], target_rect, 2)
+        pygame.draw.rect(self.screen, self.colors[tc], target_rect, border_radius=max(2, inner))
+        pygame.draw.rect(self.screen, self.colors['Black'], target_rect, 2, border_radius=max(2, inner))
 
         if self.selected_robot and not self.won:
             rx, ry = self.robots[self.selected_robot]
@@ -281,8 +295,6 @@ class RicochetRobotsPygame:
             pygame.draw.rect(self.screen, self.colors['Highlight'], sel_rect, 0)
 
         wall_thick = max(2, cs // 10)
-        grid_w = self.width * cs
-        grid_h = self.height * cs
         for y in range(self.height):
             for x in range(self.width):
                 x0 = offset_x + x * cs
@@ -305,9 +317,29 @@ class RicochetRobotsPygame:
             if name == self.selected_robot and not self.won:
                 pygame.draw.circle(self.screen, self.colors['Black'], (center_x, center_y), radius + 2, 4)
 
-        info = "空白:換目標 | R:回原位 | H:提示 | N:重生地圖與機器人"
-        reset_text = self.font.render(info, True, self.colors['Black'])
-        self.screen.blit(reset_text, (offset_x, offset_y + grid_h + cs // 3))
+        key_defs = [('↑↓←→', '移動'), ('R', '回原位'), ('H', '提示'), ('空白', '換目標'), ('N', '重生')]
+        key_color = (60, 60, 80)
+        bg_color  = (210, 210, 218)
+        pad_x, pad_y = max(3, cs // 10), max(2, cs // 14)
+        gap = pad_x * 3
+        text_y = offset_y + grid_h + cs // 3
+
+        # Pre-render to measure total width for centering
+        rendered = [(self.font.render(k, True, key_color),
+                     self.font.render(d, True, self.colors['Black'])) for k, d in key_defs]
+        total_w = sum(ks.get_width() + pad_x * 2 + ds.get_width() for ks, ds in rendered) + gap * (len(rendered) - 1)
+        kx = offset_x + (grid_w - total_w) // 2
+
+        for key_surf, desc_surf in rendered:
+            kw = key_surf.get_width() + pad_x * 2
+            kh = key_surf.get_height() + pad_y * 2
+            pygame.draw.rect(self.screen, bg_color,
+                             pygame.Rect(kx, text_y, kw, kh), border_radius=max(2, cs // 16))
+            pygame.draw.rect(self.screen, (150, 150, 165),
+                             pygame.Rect(kx, text_y, kw, kh), 1, border_radius=max(2, cs // 16))
+            self.screen.blit(key_surf, (kx + pad_x, text_y + pad_y))
+            self.screen.blit(desc_surf, (kx + kw + pad_x, text_y + pad_y))
+            kx += kw + desc_surf.get_width() + gap
 
         if self.show_hint:
             if self.optimal_steps != -1 and len(self.solution_path) > 0:
