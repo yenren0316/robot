@@ -43,6 +43,7 @@ class RicochetRobotsPygame:
         self.optimal_steps = -1
         self.solution_path = []
         self.show_hint = False
+        self.show_optimal_steps = False
         
         self.generate_random_board()
 
@@ -134,6 +135,7 @@ class RicochetRobotsPygame:
         self.robots = copy.deepcopy(self.initial_robots)
         self.selected_robot = None
         self.show_hint = False
+        self.show_optimal_steps = False
         self.optimal_steps = -1
         self.solution_path = []
         self.calculating = True 
@@ -151,9 +153,13 @@ class RicochetRobotsPygame:
         visited = set([start_state])
         
         directions = [(0, -1, '上'), (0, 1, '下'), (-1, 0, '左'), (1, 0, '右')]
-        max_depth = 12 
+        max_depth = 20 
+        max_states = 100000
         
         while queue:
+            if len(visited) > max_states:
+                break
+                
             state, path = queue.popleft()
             
             if len(path) >= max_depth:
@@ -210,10 +216,13 @@ class RicochetRobotsPygame:
         
         if self.calculating:
             opt_str = "計算最佳解中..."
-        elif self.optimal_steps != -1:
-            opt_str = f"最佳解: {self.optimal_steps} 步"
+        elif self.show_optimal_steps:
+            if self.optimal_steps != -1:
+                opt_str = f"最佳解: {self.optimal_steps} 步"
+            else:
+                opt_str = "最佳解: 20步以上 (或無解)"
         else:
-            opt_str = "最佳解: 12步以上 (或無解)"
+            opt_str = "最佳解: (點擊畫面顯示)"
             
         if self.won:
             msg = f"太棒了！共花 {self.moves} 步。按「空白鍵」下一關！"
@@ -275,14 +284,47 @@ class RicochetRobotsPygame:
         self.screen.blit(reset_text, (10, offset_y + self.height * self.cell_size + 15))
 
         if self.show_hint:
-            if self.optimal_steps != -1:
-                hint_str = "解答: " + " -> ".join([f"{c}{d}" for c, d in self.solution_path])
+            if self.optimal_steps != -1 and len(self.solution_path) > 0:
+                first_move = self.solution_path[0]
+                color_zh = first_move[0]
+                dir_name = first_move[1]
+                zh_to_color = {'紅': 'Red', '藍': 'Blue', '綠': 'Green', '黃': 'Yellow'}
+                robot_color = zh_to_color.get(color_zh)
+                if robot_color:
+                    rx, ry = self.robots[robot_color]
+                    start_x = rx * self.cell_size + self.cell_size // 2
+                    start_y = offset_y + ry * self.cell_size + self.cell_size // 2
+                    
+                    dir_map = {'上': (0, -1), '下': (0, 1), '左': (-1, 0), '右': (1, 0)}
+                    dx, dy = dir_map.get(dir_name, (0, 0))
+                    
+                    end_x = start_x + dx * self.cell_size
+                    end_y = start_y + dy * self.cell_size
+                    
+                    pygame.draw.line(self.screen, self.colors[robot_color], (start_x, start_y), (end_x, end_y), 5)
+                    
+                    if dx == 1:
+                        pts = [(end_x + 10, end_y), (end_x - 10, end_y - 10), (end_x - 10, end_y + 10)]
+                    elif dx == -1:
+                        pts = [(end_x - 10, end_y), (end_x + 10, end_y - 10), (end_x + 10, end_y + 10)]
+                    elif dy == 1:
+                        pts = [(end_x, end_y + 10), (end_x - 10, end_y - 10), (end_x + 10, end_y - 10)]
+                    elif dy == -1:
+                        pts = [(end_x, end_y - 10), (end_x - 10, end_y + 10), (end_x + 10, end_y + 10)]
+                    else:
+                        pts = []
+                        
+                    if pts:
+                        pygame.draw.polygon(self.screen, self.colors[robot_color], pts)
+                        
             elif self.calculating:
                 hint_str = "解答: 計算中..."
+                hint_text = self.font.render(hint_str, True, self.colors['Blue'])
+                self.screen.blit(hint_text, (10, offset_y + self.height * self.cell_size + 45))
             else:
-                hint_str = "解答: 12 步內無解 (地圖可能將目標封死，請按 N 重生)"
-            hint_text = self.font.render(hint_str, True, self.colors['Blue'])
-            self.screen.blit(hint_text, (10, offset_y + self.height * self.cell_size + 45))
+                hint_str = "解答: 20 步內無解 (地圖可能將目標封死，請按 N 重生)"
+                hint_text = self.font.render(hint_str, True, self.colors['Blue'])
+                self.screen.blit(hint_text, (10, offset_y + self.height * self.cell_size + 45))
 
         pygame.display.flip()
 
@@ -344,13 +386,18 @@ class RicochetRobotsPygame:
                 self.draw() 
                 pygame.display.flip()
                 self.solve_bfs() 
-                self.calculating = False
+                if 4 <= self.optimal_steps <= 20:
+                    self.calculating = False
+                else:
+                    self.generate_random_board()
+                    self.select_next_target()
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     sys.exit()
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    self.show_optimal_steps = True
                     self.handle_click(event.pos)
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_UP: self.move(0, -1)
