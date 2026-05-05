@@ -285,37 +285,74 @@ class RicochetRobotsPygame:
 
         if self.show_hint:
             if self.optimal_steps != -1 and len(self.solution_path) > 0:
-                first_move = self.solution_path[0]
-                color_zh = first_move[0]
-                dir_name = first_move[1]
+                sim_robots = copy.deepcopy(self.initial_robots)
                 zh_to_color = {'紅': 'Red', '藍': 'Blue', '綠': 'Green', '黃': 'Yellow'}
-                robot_color = zh_to_color.get(color_zh)
-                if robot_color:
-                    rx, ry = self.robots[robot_color]
-                    start_x = rx * self.cell_size + self.cell_size // 2
-                    start_y = offset_y + ry * self.cell_size + self.cell_size // 2
+                dir_map = {'上': (0, -1), '下': (0, 1), '左': (-1, 0), '右': (1, 0)}
+                
+                for step_idx, (color_zh, dir_name) in enumerate(self.solution_path):
+                    robot_color = zh_to_color.get(color_zh)
+                    if not robot_color: continue
                     
-                    dir_map = {'上': (0, -1), '下': (0, 1), '左': (-1, 0), '右': (1, 0)}
                     dx, dy = dir_map.get(dir_name, (0, 0))
+                    curr_x, curr_y = sim_robots[robot_color]
                     
-                    end_x = start_x + dx * self.cell_size
-                    end_y = start_y + dy * self.cell_size
+                    offset_shift = (step_idx % 3) * 4 - 4
+                    start_x = curr_x * self.cell_size + self.cell_size // 2 + offset_shift
+                    start_y = offset_y + curr_y * self.cell_size + self.cell_size // 2 + offset_shift
                     
-                    pygame.draw.line(self.screen, self.colors[robot_color], (start_x, start_y), (end_x, end_y), 5)
-                    
-                    if dx == 1:
-                        pts = [(end_x + 10, end_y), (end_x - 10, end_y - 10), (end_x - 10, end_y + 10)]
-                    elif dx == -1:
-                        pts = [(end_x - 10, end_y), (end_x + 10, end_y - 10), (end_x + 10, end_y + 10)]
-                    elif dy == 1:
-                        pts = [(end_x, end_y + 10), (end_x - 10, end_y - 10), (end_x + 10, end_y - 10)]
-                    elif dy == -1:
-                        pts = [(end_x, end_y - 10), (end_x - 10, end_y + 10), (end_x + 10, end_y + 10)]
-                    else:
-                        pts = []
+                    test_x, test_y = curr_x, curr_y
+                    while True:
+                        if dx == 1:
+                            if test_x + 1 >= self.width or self.v_walls[test_y][test_x + 1]: break
+                        elif dx == -1:
+                            if test_x <= 0 or self.v_walls[test_y][test_x]: break
+                        elif dy == 1:
+                            if test_y + 1 >= self.height or self.h_walls[test_y + 1][test_x]: break
+                        elif dy == -1:
+                            if test_y <= 0 or self.h_walls[test_y][test_x]: break
+                            
+                        next_x, next_y = test_x + dx, test_y + dy
+                        if 7 <= next_x <= 8 and 7 <= next_y <= 8: break
                         
-                    if pts:
-                        pygame.draw.polygon(self.screen, self.colors[robot_color], pts)
+                        collision = False
+                        for c, pos in sim_robots.items():
+                            if pos[0] == next_x and pos[1] == next_y:
+                                collision = True
+                                break
+                        if collision: break
+                        
+                        test_x, test_y = next_x, next_y
+                        
+                    sim_robots[robot_color] = [test_x, test_y]
+                    
+                    end_x = test_x * self.cell_size + self.cell_size // 2 + offset_shift
+                    end_y = offset_y + test_y * self.cell_size + self.cell_size // 2 + offset_shift
+                    
+                    if (start_x, start_y) != (end_x, end_y):
+                        pygame.draw.line(self.screen, self.colors[robot_color], (start_x, start_y), (end_x, end_y), 4)
+                        
+                        head_len = 8
+                        if dx == 1:
+                            pts = [(end_x, end_y), (end_x - head_len, end_y - head_len), (end_x - head_len, end_y + head_len)]
+                        elif dx == -1:
+                            pts = [(end_x, end_y), (end_x + head_len, end_y - head_len), (end_x + head_len, end_y + head_len)]
+                        elif dy == 1:
+                            pts = [(end_x, end_y), (end_x - head_len, end_y - head_len), (end_x + head_len, end_y - head_len)]
+                        elif dy == -1:
+                            pts = [(end_x, end_y), (end_x - head_len, end_y + head_len), (end_x + head_len, end_y + head_len)]
+                        else:
+                            pts = []
+                            
+                        if pts:
+                            pygame.draw.polygon(self.screen, self.colors[robot_color], pts)
+                            
+                        mid_x = start_x + (end_x - start_x) * 0.7
+                        mid_y = start_y + (end_y - start_y) * 0.7
+                        pygame.draw.circle(self.screen, self.colors['White'], (int(mid_x), int(mid_y)), 10)
+                        pygame.draw.circle(self.screen, self.colors['Black'], (int(mid_x), int(mid_y)), 10, 1)
+                        step_text = self.font.render(str(step_idx + 1), True, self.colors['Black'])
+                        text_rect = step_text.get_rect(center=(int(mid_x), int(mid_y)))
+                        self.screen.blit(step_text, text_rect)
                         
             elif self.calculating:
                 hint_str = "解答: 計算中..."
